@@ -4,13 +4,19 @@ description: 'Run ABM benchmarks on Galaxy servers'
 inputs:
   org-api-key:
     description: 'API key for usegalaxy.org'
-    required: true
+    required: false
   org-au-api-key:
     description: 'API key for usegalaxy.org.au'
-    required: true
+    required: false
   eu-api-key:
     description: 'API key for usegalaxy.eu'
-    required: true
+    required: false
+  custom-server-url:
+    description: 'URL of a custom Galaxy server'
+    required: false
+  custom-server-api-key:
+    description: 'API key for the custom Galaxy server'
+    required: false
   histories:
     description: 'List of history URLs in the format "name: url" (one per line)'
     required: true
@@ -19,10 +25,16 @@ inputs:
     required: true
   benchmarks-file:
     description: 'Contents of the benchmarks/testwf.yaml file'
-    required: true
+    required: false
+  benchmarks-file-path:
+    description: 'File path of the benchmarks/testwf.yaml file in the repository'
+    required: false
   experiments-file:
     description: 'Contents of the experiments/testwf.yaml file'
-    required: true
+    required: false
+  experiments-file-path:
+    description: 'File path of the experiments/testwf.yaml file in the repository'
+    required: false
 
 runs:
   using: "composite"
@@ -38,19 +50,56 @@ runs:
         ORG_API_KEY: ${{ inputs.org-api-key }}
         ORG_AU_API_KEY: ${{ inputs.org-au-api-key }}
         EU_API_KEY: ${{ inputs.eu-api-key }}
+        CUSTOM_SERVER_URL: ${{ inputs.custom-server-url }}
+        CUSTOM_SERVER_API_KEY: ${{ inputs.custom-server-api-key }}
       run: |
         python3 -m venv .venv
         source .venv/bin/activate
         pip install gxabm
         mkdir -p ~/.abm
-        cat << EOF > ~/.abm/profile.yml
+     
+        servers=()
+        
+        if [ -n "$ORG_API_KEY" ]; then
+          servers+=("usa")
+          cat << EOF >> ~/.abm/profile.yml
         usa:
           url: https://usegalaxy.org
           key: $ORG_API_KEY
+        EOF
+        fi
+        
+        if [ -n "$ORG_AU_API_KEY" ]; then
+          servers+=("australia")
+          cat << EOF >> ~/.abm/profile.yml
         australia:
           url: https://usegalaxy.org.au
           key: $ORG_AU_API_KEY
         EOF
+        fi
+        
+        if [ -n "$EU_API_KEY" ]; then
+          servers+=("europe")
+          cat << EOF >> ~/.abm/profile.yml
+        europe:
+          url: https://usegalaxy.eu
+          key: $EU_API_KEY
+        EOF
+        fi
+
+        if [ -n "$CUSTOM_SERVER_URL" ] && [ -n "$CUSTOM_SERVER_API_KEY" ]; then
+          servers+=("custom")
+          cat << EOF >> ~/.abm/profile.yml
+        custom:
+          url: $CUSTOM_SERVER_URL
+          key: $CUSTOM_SERVER_API_KEY
+        EOF
+        fi
+
+        if [ "${#servers[@]}" -eq 0 ]; then
+          echo "Error: At least one API key must be provided"
+          exit 1
+        fi
 
         cat << EOF > ~/.abm/histories.yml
         ${{ inputs.histories }}
@@ -61,19 +110,33 @@ runs:
         EOF
 
         mkdir -p benchmarks
-        cat << EOF > benchmarks/testwf.yaml
+        if [ -n "${{ inputs.benchmarks-file }}" ]; then
+          cat << EOF > benchmarks/testwf.yaml
         ${{ inputs.benchmarks-file }}
         EOF
+        elif [ -n "${{ inputs.benchmarks-file-path }}" ]; then
+          cp ${{ inputs.benchmarks-file-path }} benchmarks/testwf.yaml
+        else
+          echo "Error: Either benchmarks-file or benchmarks-file-path must be provided"
+          exit 1
+        fi
 
         mkdir -p experiments
-        cat << EOF > experiments/testwf.yaml
+        if [ -n "${{ inputs.experiments-file }}" ]; then
+          cat << EOF > experiments/testwf.yaml
         ${{ inputs.experiments-file }}
         EOF
+        elif [ -n "${{ inputs.experiments-file-path }}" ]; then
+          cp ${{ inputs.experiments-file-path }} experiments/testwf.yaml
+        else
+          echo "Error: Either experiments-file or experiments-file-path must be provided"
+          exit 1
+        fi
 
         source .venv/bin/activate
         HISTORY_NAME=$(awk -F':' '{print $1}' <<< "${{ inputs.histories }}")
         WORKFLOW_NAME=$(awk -F':' '{print $1}' <<< "${{ inputs.workflows }}")
-        for server in usa australia; do
+        for server in "${servers[@]}"; do
             abm $server workflow import $WORKFLOW_NAME
             abm $server history import $HISTORY_NAME
         done
@@ -88,3 +151,4 @@ runs:
         source .venv/bin/activate
         EXP_NAME=$(cat experiments/testwf.yaml | grep 'name:' | awk -F':' '{print $1}')
         abm experiment summarize metrics/experiment $EXP_NAME
+
