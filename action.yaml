@@ -20,9 +20,15 @@ inputs:
   histories:
     description: 'List of history URLs in the format "name: url" (one per line)'
     required: true
+  histories-path:
+    description: 'Path to the file containing the list of history URLs'
+    required: false
   workflows:
     description: 'List of workflow URLs in the format "name: url" (one per line)'
-    required: true
+    required: false
+  workflows-path:
+    description: 'Path to the file containing the list of workflow URLs'
+    required: false
   benchmarks-file:
     description: 'Contents of the benchmarks/testwf.yaml file'
     required: false
@@ -101,13 +107,27 @@ runs:
           exit 1
         fi
 
-        cat << EOF > ~/.abm/histories.yml
+        if [ -n "${{ inputs.histories }}" ]; then
+          cat << EOF > ~/.abm/histories.yml
         ${{ inputs.histories }}
         EOF
+        elif [ -n "${{ inputs.histories-path }}" ]; then
+          cp ${{ inputs.histories-path }} ~/.abm/histories.yml
+        else
+          echo "Error: Either histories or histories-path must be provided"
+          exit 1
+        fi
 
-        cat << EOF > ~/.abm/workflows.yml
+        if [ -n "${{ inputs.workflows }}" ]; then
+          cat << EOF > ~/.abm/workflows.yml
         ${{ inputs.workflows }}
         EOF
+        elif [ -n "${{ inputs.workflows-path }}" ]; then
+          cp ${{ inputs.workflows-path }} ~/.abm/workflows.yml
+        else
+          echo "Error: Either workflows or workflows-path must be provided"
+          exit 1
+        fi
 
         mkdir -p benchmarks
         if [ -n "${{ inputs.benchmarks-file }}" ]; then
