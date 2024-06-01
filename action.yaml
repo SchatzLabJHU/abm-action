@@ -1,0 +1,90 @@
+name: 'ABM Benchmarks'
+description: 'Run ABM benchmarks on Galaxy servers'
+
+inputs:
+  org-api-key:
+    description: 'API key for usegalaxy.org'
+    required: true
+  org-au-api-key:
+    description: 'API key for usegalaxy.org.au'
+    required: true
+  eu-api-key:
+    description: 'API key for usegalaxy.eu'
+    required: true
+  histories:
+    description: 'List of history URLs in the format "name: url" (one per line)'
+    required: true
+  workflows:
+    description: 'List of workflow URLs in the format "name: url" (one per line)'
+    required: true
+  benchmarks-file:
+    description: 'Contents of the benchmarks/testwf.yaml file'
+    required: true
+  experiments-file:
+    description: 'Contents of the experiments/testwf.yaml file'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+
+    - name: Run ABM
+      env:
+        ORG_API_KEY: ${{ inputs.org-api-key }}
+        ORG_AU_API_KEY: ${{ inputs.org-au-api-key }}
+        EU_API_KEY: ${{ inputs.eu-api-key }}
+      run: |
+        python3 -m venv .venv
+        source .venv/bin/activate
+        pip install gxabm
+        mkdir -p ~/.abm
+        cat << EOF > ~/.abm/profile.yml
+        usa:
+          url: https://usegalaxy.org
+          key: $ORG_API_KEY
+        australia:
+          url: https://usegalaxy.org.au
+          key: $ORG_AU_API_KEY
+        EOF
+
+        cat << EOF > ~/.abm/histories.yml
+        ${{ inputs.histories }}
+        EOF
+
+        cat << EOF > ~/.abm/workflows.yml
+        ${{ inputs.workflows }}
+        EOF
+
+        mkdir -p benchmarks
+        cat << EOF > benchmarks/testwf.yaml
+        ${{ inputs.benchmarks-file }}
+        EOF
+
+        mkdir -p experiments
+        cat << EOF > experiments/testwf.yaml
+        ${{ inputs.experiments-file }}
+        EOF
+
+        source .venv/bin/activate
+        HISTORY_NAME=$(awk -F':' '{print $1}' <<< "${{ inputs.histories }}")
+        WORKFLOW_NAME=$(awk -F':' '{print $1}' <<< "${{ inputs.workflows }}")
+        for server in usa australia; do
+            abm $server workflow import $WORKFLOW_NAME
+            abm $server history import $HISTORY_NAME
+        done
+
+    - name: Run experiment
+      run: |
+        source .venv/bin/activate
+        abm experiment run experiments/testwf.yaml
+
+    - name: Summarize results
+      run: |
+        source .venv/bin/activate
+        EXP_NAME=$(cat experiments/testwf.yaml | grep 'name:' | awk -F':' '{print $1}')
+        abm experiment summarize metrics/experiment $EXP_NAME
