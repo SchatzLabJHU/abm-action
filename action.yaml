@@ -52,6 +52,7 @@ runs:
       uses: actions/setup-python@v4
 
     - name: Run ABM
+      shell: bash
       env:
         ORG_API_KEY: ${{ inputs.org-api-key }}
         ORG_AU_API_KEY: ${{ inputs.org-au-api-key }}
@@ -176,11 +177,13 @@ runs:
         done
 
     - name: Run experiment
+      shell: bash
       run: |
         source .venv/bin/activate
         abm experiment run experiment.yml
 
     - name: Summarize results
+      shell: bash
       run: |
         source .venv/bin/activate
         EXP_NAME=$(cat experiment.yml | grep 'name:' | awk -F':' '{print $1}')
