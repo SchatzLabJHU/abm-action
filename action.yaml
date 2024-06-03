@@ -46,7 +46,7 @@ runs:
   using: "composite"
   steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -114,8 +114,9 @@ runs:
         elif [ -n "${{ inputs.histories-path }}" ]; then
           cp ${{ inputs.histories-path }} ~/.abm/histories.yml
         else
-          echo "Error: Either histories or histories-path must be provided"
-          exit 1
+          #echo "Error: Either histories or histories-path must be provided"
+          #exit 1
+          echo "No histories provided. Expecting a histories.yml file in the repository"
         fi
 
         if [ -n "${{ inputs.workflows }}" ]; then
@@ -125,37 +126,40 @@ runs:
         elif [ -n "${{ inputs.workflows-path }}" ]; then
           cp ${{ inputs.workflows-path }} ~/.abm/workflows.yml
         else
-          echo "Error: Either workflows or workflows-path must be provided"
-          exit 1
+          #echo "Error: Either workflows or workflows-path must be provided"
+          #exit 1
+          echo "No workflows provided. Expecting a workflows.yml file in the repository"
         fi
 
-        mkdir -p benchmarks
+        #mkdir -p benchmarks
         if [ -n "${{ inputs.benchmarks-file }}" ]; then
-          cat << EOF > benchmarks/testwf.yaml
+          cat << EOF > benchmark.yml
         ${{ inputs.benchmarks-file }}
         EOF
         elif [ -n "${{ inputs.benchmarks-file-path }}" ]; then
-          cp ${{ inputs.benchmarks-file-path }} benchmarks/testwf.yaml
+          cp ${{ inputs.benchmarks-file-path }} benchmark.yml
         else
-          echo "Error: Either benchmarks-file or benchmarks-file-path must be provided"
-          exit 1
+          #echo "Error: Either benchmarks-file or benchmarks-file-path must be provided"
+          #exit 1
+          echo "No benchmark provided. Expecting a benchmark.yml file in the repository"
         fi
 
-        mkdir -p experiments
+        #mkdir -p experiments
         if [ -n "${{ inputs.experiments-file }}" ]; then
-          cat << EOF > experiments/testwf.yaml
+          cat << EOF > experiment.yml
         ${{ inputs.experiments-file }}
         EOF
         elif [ -n "${{ inputs.experiments-file-path }}" ]; then
-          cp ${{ inputs.experiments-file-path }} experiments/testwf.yaml
+          cp ${{ inputs.experiments-file-path }} experiment.yml
         else
-          echo "Error: Either experiments-file or experiments-file-path must be provided"
-          exit 1
+          #echo "Error: Either experiments-file or experiments-file-path must be provided"
+          #exit 1
+          echo "No experiment provided. Expecting a experiment.yml file in the repository"
         fi
 
         source .venv/bin/activate
-        HISTORY_NAME=$(awk -F':' '{print $1}' <<< "${{ inputs.histories }}")
-        WORKFLOW_NAME=$(awk -F':' '{print $1}' <<< "${{ inputs.workflows }}")
+        HISTORY_NAME=$(cat .abm/histories.yml | head -n 1 | awk -F':' '{print $1}')
+        WORKFLOW_NAME=$(cat .abm/workflows.yml | head -n 1 | awk -F':' '{print $1}')
         for server in "${servers[@]}"; do
             abm $server workflow import $WORKFLOW_NAME
             abm $server history import $HISTORY_NAME
@@ -164,11 +168,11 @@ runs:
     - name: Run experiment
       run: |
         source .venv/bin/activate
-        abm experiment run experiments/testwf.yaml
+        abm experiment run experiment.yml
 
     - name: Summarize results
       run: |
         source .venv/bin/activate
-        EXP_NAME=$(cat experiments/testwf.yaml | grep 'name:' | awk -F':' '{print $1}')
-        abm experiment summarize metrics/experiment $EXP_NAME
+        EXP_NAME=$(cat experiment.yml | grep 'name:' | awk -F':' '{print $1}')
+        abm experiment summarize metrics/$EXP_NAME
 
