@@ -19,7 +19,7 @@ inputs:
     required: false
   histories:
     description: 'List of history URLs in the format "name: url" (one per line)'
-    required: true
+    required: false
   histories-path:
     description: 'Path to the file containing the list of history URLs'
     required: false
